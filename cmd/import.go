@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/kr/pretty"
@@ -16,6 +18,31 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 )
+
+func Copy(src, dst string) (int64, error) {
+	sourceFileStat, err := os.Stat(src)
+	if err != nil {
+		return 0, err
+	}
+
+	if !sourceFileStat.Mode().IsRegular() {
+		return 0, fmt.Errorf("%s is not a regular file", src)
+	}
+
+	source, err := os.Open(src)
+	if err != nil {
+		return 0, err
+	}
+	defer source.Close()
+
+	destination, err := os.Create(dst)
+	if err != nil {
+		return 0, err
+	}
+	defer destination.Close()
+	nBytes, err := io.Copy(destination, source)
+	return nBytes, err
+}
 
 var importCmd = &cobra.Command{
 	Use: "import",
@@ -29,6 +56,103 @@ var importCmd = &cobra.Command{
 	//
 	// 	pretty.Println(lib)
 	// },
+}
+
+type OldChapter struct {
+	Index int      `json:"index"`
+	Name  string   `json:"name"`
+	Pages []string `json:"pages"`
+}
+
+type OldManga struct {
+	Title    string       `json:"title"`
+	Chapters []OldChapter `json:"chapters"`
+}
+
+var importOldCmd = &cobra.Command{
+	Use:  "old <DIR>",
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("args[0]: %v\n", args[0])
+
+		output, _ := cmd.Flags().GetString("output")
+
+		p := args[0]
+
+		mangaInfoPath := path.Join(args[0], "manga.json")
+
+		data, err := os.ReadFile(mangaInfoPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var info OldManga
+		err = json.Unmarshal(data, &info)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		pretty.Println(info)
+
+		serieSlug := library.Slug(info.Title)
+
+		p = path.Join(output, serieSlug)
+		err = os.Mkdir(p, 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var chapters []library.ChapterMetadata
+
+		for _, chapter := range info.Chapters {
+			slug := library.Slug(chapter.Name)
+
+			chapterPath := path.Join(p, slug)
+			err := os.Mkdir(chapterPath, 0755)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			for _, page := range chapter.Pages {
+				pagePath := path.Join(args[0], "chapters", strconv.Itoa(chapter.Index), page)
+				_, err := Copy(pagePath, path.Join(chapterPath, page))
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			fmt.Println("Done Copying:", slug)
+
+			chapters = append(chapters, library.ChapterMetadata{
+				Slug:  slug,
+				Name:  chapter.Name,
+				Pages: chapter.Pages,
+			})
+		}
+
+		serie := library.SerieMetadata{
+			Slug:     serieSlug,
+			Title:    info.Title,
+			CoverArt: "",
+			Chapters: chapters,
+		}
+
+		slices.SortFunc(serie.Chapters, func(a, b library.ChapterMetadata) int {
+			return strings.Compare(a.Slug, b.Slug)
+		})
+
+		data, err = toml.Marshal(serie)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = os.WriteFile(path.Join(p, "manga.toml"), data, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println("Done")
+	},
 }
 
 var importCbzCmd = &cobra.Command{
@@ -182,7 +306,10 @@ var importCbzCmd = &cobra.Command{
 }
 
 func init() {
+	importOldCmd.Flags().StringP("output", "o", ".", "Output Directory")
+
 	importCmd.AddCommand(importCbzCmd)
+	importCmd.AddCommand(importOldCmd)
 
 	rootCmd.AddCommand(importCmd)
 }
