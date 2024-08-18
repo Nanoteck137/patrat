@@ -10,10 +10,12 @@ import (
 	"os"
 	"path"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/kr/pretty"
+	"github.com/maruel/natural"
 	"github.com/nanoteck137/sewaddle-core/library"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
@@ -137,8 +139,15 @@ var importOldCmd = &cobra.Command{
 			Chapters: chapters,
 		}
 
-		slices.SortFunc(serie.Chapters, func(a, b library.ChapterMetadata) int {
-			return strings.Compare(a.Slug, b.Slug)
+		// slices.SortFunc(serie.Chapters, func(a, b library.ChapterMetadata) int {
+		// 	return strings.Compare(a.Slug, b.Slug)
+		// })
+
+		sort.Slice(serie.Chapters, func(i, j int) bool {
+			x := serie.Chapters[i]
+			y := serie.Chapters[j]
+
+			return natural.Less(x.Slug, y.Slug)
 		})
 
 		data, err = toml.Marshal(serie)
