@@ -30,7 +30,7 @@
             "-X github.com/nanoteck137/patrat/cmd.Commit=${self.dirtyRev or self.rev or "no-commit"}"
           ];
 
-          vendorHash = "sha256-sMRipXuPfOFWiBV3B5ioeQv0/3XIyP0YQ1XzzO2vY+s=";
+          vendorHash = "sha256-IakLv5EfTb3/YhlXFquIuxT9HvmDurNrfli1ZHQbaL8=";
         };
 
         tools = devtools.packages.${system};
