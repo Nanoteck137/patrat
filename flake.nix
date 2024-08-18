@@ -37,7 +37,7 @@
       in
       {
         packages.default = app;
-        packages.pyrin = app;
+        packages.patrat = app;
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
